@@ -19,6 +19,14 @@ class WalkerPolicy:
   """Joystick walker: (walker obs, velocity command) -> 15 normalized actions."""
 
   def __init__(self, npz_path: str | Path):
+    npz_path = Path(npz_path)
+    if not npz_path.exists():
+      ckpts = sorted(p.name for p in npz_path.parent.glob("checkpoints/run_*/*"))
+      raise FileNotFoundError(
+          f"{npz_path} does not exist: the walker has not been trained/exported yet.\n"
+          f"  checkpoints found: {ckpts[-3:] if ckpts else 'none'}\n"
+          "  Run stage 4 (scripts/train_walker.py) until it prints 'numpy runtime vs Brax',\n"
+          "  or export the latest checkpoint with: train_walker.py --out <walker dir> --export_only")
     z = np.load(npz_path)
     self.mean = z["obs_mean"].astype(np.float64)
     self.std = z["obs_std"].astype(np.float64)
