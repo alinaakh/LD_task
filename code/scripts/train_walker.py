@@ -35,6 +35,11 @@ from g1nav.walker import WalkerPolicy  # noqa: E402
 
 ENV_NAME = "G1JoystickFlatTerrain"
 
+if not jax.__version__.startswith("0.9."):
+  # brax 0.14.2 calls jax.device_put_replicated, which JAX >= 0.10 removed.
+  sys.exit(f"jax {jax.__version__} is installed but brax 0.14.2 needs jax 0.9.x. Fix with:\n"
+           "  uv pip install --python /content/jaxenv/bin/python -r requirements-walker.txt")
+
 
 class LowerBodyJoystick(g1_joystick.Joystick):
   """G1 Joystick where the policy commands only legs + waist (15 joints)."""
@@ -108,7 +113,7 @@ def train(args):
   net_cfg = params.pop("network_factory")
   num_eval_envs = params.pop("num_eval_envs", 128)
   run_dir = ckpt_root / f"run_{len(runs):02d}"
-  run_dir.mkdir()
+  run_dir.mkdir(exist_ok=True)  # may exist, empty, if a previous attempt crashed early
 
   log = open(out / "progress.jsonl", "a")
   t0 = time.time()
