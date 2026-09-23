@@ -1,0 +1,8 @@
+# Simulation, data generation, GR00T features, student training/eval (system Python on Colab).
+mujoco==3.14.0
+numpy
+pillow
+certifi
+safetensors
+torch>=2.3
+transformers>=4.51

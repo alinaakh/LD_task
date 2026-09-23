@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+runs/
+code/assets/g1/
+*.mp4
+*.zip
+MUJOCO_LOG.TXT
