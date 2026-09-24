@@ -4,8 +4,9 @@ Behaviour cloning alone suffers from compounding errors, which for a humanoid
 means falling. Here the student acts in closed loop; the privileged expert
 (navigator + walker) labels each visited state with its joint targets, and
 takes over for 1 s whenever the torso tilts past ~25 deg so the data also
-contains recoveries. Episodes run for the full time limit, so the student
-also learns to stop and stand at the goal. Features are extracted in-process.
+contains recoveries. Episodes end 3 s after the goal is reached (so the
+student also sees stopping), or at the time limit. Features are extracted
+in-process.
 
     python scripts/dagger.py --student $G1NAV_DATA/vla/bc/student.pt \
         --walker $G1NAV_DATA/walker/walker.npz --out $G1NAV_DATA/episodes/dagger1 \
@@ -50,7 +51,10 @@ def main():
     if path.exists():
       continue
     task = tasks.sample_task(np.random.default_rng(seed), split="train")
-    ep = rollout.run_episode(task, walker, seed=seed, student=runner, dagger=True)
+    # End 3 s after the goal is truly reached (the navigator tracks the real
+    # pose); students that never get there run to the time limit.
+    ep = rollout.run_episode(task, walker, seed=seed, student=runner, dagger=True,
+                             stop_when_done=True)
     rollout.save_episode(path, ep)
     s = stats.setdefault(task.family, {"n": 0, "success": 0, "expert_frac": 0.0})
     s["n"] += 1

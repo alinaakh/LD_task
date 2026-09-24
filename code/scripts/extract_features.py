@@ -39,10 +39,12 @@ def extract_dir(ep_dir: Path, vision, text, device, batch: int = 64):
   t0, frames = time.time(), 0
   for j, p in enumerate(todo):
     rgb = np.stack(rollout.load_episode(p, with_images=True)["rgb"])
-    out = []
+    qs, scales = [], []
     for i in range(0, len(rgb), batch):
-      out.append(vision(torch.from_numpy(rgb[i:i + batch]).to(device)).to("cpu", torch.float16))
-    np.save(feats_path(p), torch.cat(out).numpy())
+      q, s = groot.quantize_features(vision(torch.from_numpy(rgb[i:i + batch]).to(device)))
+      qs.append(q.cpu())
+      scales.append(s.cpu())
+    np.savez(feats_path(p), q=torch.cat(qs).numpy(), scale=torch.cat(scales).numpy())
     frames += len(rgb)
     if (j + 1) % 25 == 0 or j + 1 == len(todo):
       print(f"  {ep_dir.name}: {j + 1}/{len(todo)} episodes, {frames / (time.time() - t0):.0f} frames/s",

@@ -234,6 +234,22 @@ class EagleVision(nn.Module):
     return x.flatten(2).transpose(1, 2)                           # (B, 16, 2048)
 
 
+def quantize_features(x: torch.Tensor):
+  """(..., 2048) float -> int8 codes + per-token fp16 scale (absmax).
+
+  Halves storage of the cached vision features (the dataset otherwise outgrows
+  a free Colab's T4 memory, RAM, and Drive). The runtime applies the same
+  round trip to every live frame so training and deployment inputs match.
+  """
+  scale = x.float().abs().amax(-1, keepdim=True).clamp_min(1e-6) / 127.0
+  q = torch.round(x.float() / scale).clamp(-127, 127).to(torch.int8)
+  return q, scale.to(torch.float16)
+
+
+def dequantize_features(q: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
+  return (q.to(torch.float16) * scale.to(torch.float16))
+
+
 # ----------------------------------------------------------------------------- language
 
 def normalize_instruction(text: str) -> str:

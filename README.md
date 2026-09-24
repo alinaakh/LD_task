@@ -30,7 +30,7 @@ videos/                    egocentric RGB + depth next to a third-person view, o
 |---|---|---|
 | GPU | NVIDIA T4 16 GB (Google Colab free tier) | any CUDA GPU with ≥ 12 GB for walker PPO and feature extraction; ≥ 6 GB for evaluation only |
 | System RAM | 12.7 GB (Colab) | 12 GB |
-| Disk | ~12 GB (episodes + features ~8 GB, GR00T subset 3.1 GB) | same |
+| Disk | ~9 GB persistent (episodes ~3.5 GB + int8 vision features ~5.5 GB) + 3.1 GB GR00T subset (local, re-downloadable) | same |
 | Software | Python 3, `code/requirements.txt`; walker training in a separate env with `code/requirements-walker.txt` | |
 
 Evaluation alone (given `checkpoint/`) needs only `requirements.txt` and the GR00T download (3.1 GB).

@@ -91,7 +91,7 @@ class StudentRunner:
     if frame is not None:
       rgb, depth = frame
       img = torch.as_tensor(rgb, device=self.device)[None]
-      feat = self._timed("vision", lambda: self.vision(img)[0])
+      feat = self._timed("vision", lambda: self._encode(img))
       self.vis_hist.append(feat)
       self.depth_hist.append(torch.as_tensor(downsample_depth(depth).astype(np.float32),
                                              device=self.device))
@@ -101,6 +101,10 @@ class StudentRunner:
     hist = torch.stack(list(self.prop_hist))[None]
     a = self._timed("fast", lambda: self.student.fast_forward(self.z, self.cmd, hist))
     return a[0].float().cpu().numpy()
+
+  def _encode(self, img):
+    # Same int8 round trip as the training features (see groot.quantize_features).
+    return groot.dequantize_features(*groot.quantize_features(self.vision(img)[0]))
 
   def _slow(self, prop_now):
     k = len(self.vis_hist) - 1

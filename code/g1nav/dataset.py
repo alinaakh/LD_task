@@ -20,7 +20,8 @@ from g1nav.model import StudentConfig
 
 
 def feats_path(ep_path: Path) -> Path:
-  return ep_path.with_suffix(".feats.npy")
+  """int8 vision features: arrays q (K,16,2048) int8 and scale (K,16,1) fp16."""
+  return ep_path.with_suffix(".feats.npz")
 
 
 def text_feats_path(ep_dir: Path) -> Path:
@@ -45,12 +46,13 @@ class FeatureBank:
       metas.append((p, ep, n_t, n_k))
       n_t += len(ep["action"])
       n_k += len(ep["vis_t"])
-    feat_gb = n_k * cfg.vis_tokens * cfg.vis_dim * 2 / 1e9
+    feat_gb = n_k * cfg.vis_tokens * cfg.vis_dim / 1e9
     store = device if (device.type != "cpu" and feat_gb < max_gpu_gb) else torch.device("cpu")
     print(f"{len(paths)} episodes, {n_t * 0.02 / 3600:.2f} h, {n_k} frames "
-          f"({feat_gb:.1f} GB features on {store})")
+          f"({feat_gb:.1f} GB int8 features on {store})")
 
-    self.vis = torch.empty(n_k, cfg.vis_tokens, cfg.vis_dim, dtype=torch.float16, device=store)
+    self.vis_q = torch.empty(n_k, cfg.vis_tokens, cfg.vis_dim, dtype=torch.int8, device=store)
+    self.vis_scale = torch.empty(n_k, cfg.vis_tokens, 1, dtype=torch.float16, device=store)
     self.depth = torch.empty(n_k, rollout.DEPTH_RES, rollout.DEPTH_RES, dtype=torch.float16,
                              device=device)
     self.prop = torch.empty(n_t, cfg.proprio_dim, device=device)
@@ -62,8 +64,9 @@ class FeatureBank:
     for e, (p, ep, t0, k0) in enumerate(metas):
       T, K = len(ep["action"]), len(ep["vis_t"])
       f = np.load(feats_path(p))
-      assert f.shape[0] == K, (p, f.shape, K)
-      self.vis[k0:k0 + K] = torch.from_numpy(f).to(store)
+      assert f["q"].shape[0] == K, (p, f["q"].shape, K)
+      self.vis_q[k0:k0 + K] = torch.from_numpy(f["q"]).to(store)
+      self.vis_scale[k0:k0 + K] = torch.from_numpy(f["scale"]).to(store)
       self.depth[k0:k0 + K] = torch.from_numpy(ep["depth"]).to(device)
       self.prop[t0:t0 + T] = torch.from_numpy(ep["proprio"]).to(device)
       self.action[t0:t0 + T] = torch.from_numpy(ep["action"]).to(device)
@@ -120,8 +123,11 @@ class FeatureBank:
     dep_idx = self.ep_k0[e, None] + (k[:, None] - self.depth_offsets).clamp_min(0)
     prop_idx = self.ep_t0[e, None] + (tl[:, None] - self.hist).clamp_min(0)
     ti = self.ep_text[e]
+    vi = vis_idx.to(self.vis_q.device)
+    vis = groot.dequantize_features(self.vis_q[vi].to(self.device, non_blocking=True),
+                                    self.vis_scale[vi].to(self.device, non_blocking=True))
     return dict(
-        vis=self.vis[vis_idx.to(self.vis.device)].to(self.device, non_blocking=True),
+        vis=vis,
         vis_valid=valid,
         depth=self.depth[dep_idx],
         prop_hist=self.prop[prop_idx],
