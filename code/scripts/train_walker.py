@@ -11,6 +11,8 @@ Colab disconnect costs at most one checkpoint interval.
 
     python scripts/train_walker.py --out $G1NAV_DATA/walker            # train / resume
     python scripts/train_walker.py --out $G1NAV_DATA/walker --export_only
+    python scripts/train_walker.py --out $G1NAV_DATA/walker --nav --num_timesteps 260000000
+        # continue from the latest checkpoint, specialized to navigation commands
 """
 
 import argparse
@@ -65,9 +67,17 @@ def _link_menagerie():
     dst.symlink_to(src, target_is_directory=True)
 
 
-def make_env(impl: str):
+def make_env(impl: str, nav: bool = False):
   _link_menagerie()
   cfg = g1_joystick.default_config()
+  if nav:
+    # Specialize to the commands the navigator actually sends (forward walking
+    # up to 0.6 m/s and turning up to 0.8 rad/s, with margin) and milder pushes.
+    # Sensor noise and domain randomization stay on.
+    cfg.lin_vel_x = [0.0, 0.8]
+    cfg.lin_vel_y = [-0.2, 0.2]
+    cfg.ang_vel_yaw = [-1.0, 1.0]
+    cfg.push_config.magnitude_range = [0.1, 1.0]
   return LowerBodyJoystick(task="flat_terrain", config=cfg, config_overrides={"impl": impl})
 
 
@@ -104,8 +114,8 @@ def train(args):
   if remaining <= 0:
     return
 
-  env = make_env(args.impl)
-  eval_env = make_env(args.impl)
+  env = make_env(args.impl, args.nav)
+  eval_env = make_env(args.impl, args.nav)
   p = ppo_config(args.impl, remaining, args.num_envs, args.smoke)
   # Keep the checkpoint interval roughly constant (~10M steps) across restarts.
   p.num_evals = max(2, int(remaining // 10_000_000) + 1)
@@ -198,6 +208,9 @@ def main():
   ap.add_argument("--seed", type=int, default=0)
   ap.add_argument("--export_only", action="store_true")
   ap.add_argument("--smoke", action="store_true", help="tiny CPU run to test the pipeline")
+  ap.add_argument("--nav", action="store_true",
+                  help="fine-tune on navigation-range commands (forward 0-0.8 m/s, turn +-1 rad/s) "
+                       "with milder pushes; resumes from the latest checkpoint")
   args = ap.parse_args()
   if not args.export_only:
     train(args)
