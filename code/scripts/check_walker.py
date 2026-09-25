@@ -42,20 +42,24 @@ def command_tracking(walker, n_trials, seed):
         ang = sim.data.qvel[5]  # free-joint angular velocity is in the pelvis frame
         errs.append([abs(lin[0] - cmd[0]), abs(ang - cmd[2])])
     sim.close()
-  errs = np.asarray(errs)
+  errs = np.asarray(errs).reshape(-1, 2)
+  if not len(errs):
+    return dict(trials=n_trials, falls=falls)
   return dict(trials=n_trials, falls=falls, vx_mae=float(errs[:, 0].mean()),
               wz_mae=float(errs[:, 1].mean()))
 
 
-def expert_tasks(walker, n, seed, video):
+def expert_tasks(walker, n, seed, video, start=1):
   rng = np.random.default_rng(seed)
   by_family = {}
   for i in range(n):
     task = tasks.sample_task(rng, family=tasks.FAMILIES[i % len(tasks.FAMILIES)])
+    if i + 1 < start:  # replay the sampler so task numbering matches earlier runs
+      continue
     ep = rollout.run_episode(task, walker, seed=seed + i,
-                             video_path=video if (video and i == 0) else None)
+                             video_path=video if (video and i + 1 == start) else None)
     by_family.setdefault(task.family, []).append(ep["meta"]["result"]["success"])
-    print(f"{task.family:10s} {ep['meta']['result']['reason']:17s} {task.instruction!r}")
+    print(f"{i + 1:3d} {task.family:10s} {ep['meta']['result']['reason']:17s} {task.instruction!r}")
   return {f: float(np.mean(v)) for f, v in by_family.items()}
 
 
@@ -66,11 +70,13 @@ def main():
   ap.add_argument("--tasks", type=int, default=20)
   ap.add_argument("--video", default=None)
   ap.add_argument("--seed", type=int, default=12345)
+  ap.add_argument("--start", type=int, default=1, help="first task number to run (1-based)")
   args = ap.parse_args()
   walker = WalkerPolicy(args.walker)
-  tracking = command_tracking(walker, args.trials, args.seed)
-  print("command tracking:", json.dumps(tracking))
-  success = expert_tasks(walker, args.tasks, args.seed, args.video)
+  if args.trials > 0:
+    tracking = command_tracking(walker, args.trials, args.seed)
+    print("command tracking:", json.dumps(tracking))
+  success = expert_tasks(walker, args.tasks, args.seed, args.video, args.start)
   print("expert success by family:", json.dumps(success))
 
 
