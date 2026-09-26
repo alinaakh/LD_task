@@ -43,7 +43,7 @@ def decode_jpeg(b: bytes) -> np.ndarray:
 
 def run_episode(task: Task, walker, seed: int, student=None, *, dagger: bool = False,
                 video_path=None, time_limit: float | None = None, noise: float = 1.0,
-                stop_when_done: bool | None = None) -> dict:
+                stop_when_done: bool | None = None, progress_every: int = 0) -> dict:
   """Returns a dict of arrays + metadata (see save_episode for the on-disk format).
 
   student=None -> the expert (navigator + walker) drives.
@@ -66,7 +66,11 @@ def run_episode(task: Task, walker, seed: int, student=None, *, dagger: bool = F
   latency = []
   takeover = 0
   fell = False
+  t_start = time.perf_counter()
   for t in range(n_steps):
+    if progress_every and t and t % progress_every == 0:
+      print(f"      seed={seed} step {t}/{n_steps} ({t * robot.CTRL_DT:.0f}s sim, "
+            f"{time.perf_counter() - t_start:.0f}s wall)", flush=True)
     pose = sim.pose()
     cmd = nav.command(*pose, t * robot.CTRL_DT)
     a_exp = walker(sim.walker_obs(cmd))

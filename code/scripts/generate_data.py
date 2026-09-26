@@ -13,6 +13,7 @@ with an error instead of waiting forever; rerunning skips saved episodes.
 """
 
 import argparse
+import faulthandler
 import hashlib
 import json
 import multiprocessing as mp
@@ -39,13 +40,24 @@ def _init(walker_path):
 def _work(job):
   seed, out_dir = job
   t0 = time.time()
+  # Watchdog: if one episode runs for over 3 min of wall time, print where this
+  # worker is (stack trace to stderr) every 3 min, to tell "slow" from "stuck".
+  print(f"      start seed={seed}", flush=True)
+  faulthandler.dump_traceback_later(180, repeat=True)
+  try:
+    return _run(seed, out_dir, t0)
+  finally:
+    faulthandler.cancel_dump_traceback_later()
+
+
+def _run(seed, out_dir, t0):
   path = Path(out_dir) / f"ep_{seed:07d}.npz"
   if path.exists():
     meta = rollout.load_episode(path)["meta"]
     return seed, meta["task"]["family"], True, meta["steps"], "cached", time.time() - t0
   rng = np.random.default_rng(seed)
   task = tasks.sample_task(rng, split="train")
-  ep = rollout.run_episode(task, _WALKER, seed=seed)
+  ep = rollout.run_episode(task, _WALKER, seed=seed, progress_every=500)
   ok = ep["meta"]["result"]["success"]
   if ok:
     rollout.save_episode(path, ep)
